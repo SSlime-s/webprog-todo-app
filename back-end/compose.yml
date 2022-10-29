@@ -1,0 +1,42 @@
+version: '3'
+
+services:
+  # server:
+  #   container_name: todo-app-server
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - db
+  #   volumes:
+  #     - ./:/app
+  #     - cargo-cache:/usr/local/cargo/registry
+  #     - target-cache:/app/target
+  #   command: /bin/sh -c "cargo run"
+  #   tty: true
+
+  db:
+    container_name: todo-app-db
+    image: mariadb:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: todo
+    command: >
+      mysqld &&
+      chmod -R 777 /var/lib/mysql
+    # command: >
+    #   bash -c 'usermod -o -u $LINUX_MYSQL_UID mysql;
+    #     groupmod -o -g $LINUX_MYSQL_GID mysql;
+    #     chown -R mysql:root /var/run/mysqld/ /var/log/mysql/ /var/lib/mysql/;
+    #     mysqld --user=mysql --console'
+    volumes:
+      - ./mysql/data:/var/lib/mysql:z
+      - ./mysql/init:/docker-entrypoint-initdb.d:z
+    ports:
+      - "3306:3306"
+
+volumes:
+  cargo-cache:
+  target-cache:
