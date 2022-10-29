@@ -14,7 +14,10 @@ async fn hello_world() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env::set_var("RUST_LOG", "info");
     dotenv().ok();
+    env_logger::init();
+
     let hostname = env::var("MARIADB_HOSTNAME").unwrap();
     let database = env::var("MARIADB_DATABASE").unwrap();
     let username = env::var("MARIADB_USERNAME").unwrap();
