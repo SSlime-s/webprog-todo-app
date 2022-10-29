@@ -5,8 +5,8 @@ USE `todo`;
 CREATE TABLE IF NOT EXISTS `tags` (
   `id` VARBINARY(16) NOT NULL,
   `name` VARCHAR(255) NOT NULL,
-  `created_at` DATETIME NOT NULL,
-  `updated_at` DATETIME NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `username` VARCHAR(255) NOT NULL UNIQUE,
   `display_name` VARCHAR(255) NOT NULL,
   `hashed_password` VARBINARY(60) NOT NULL,
-  `created_at` DATETIME NOT NULL,
-  `updated_at` DATETIME NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted_at` DATETIME,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS `todos` (
   `author_id` VARBINARY(16),
   `title` VARCHAR(255) NOT NULL,
   `description` TEXT,
-  `created_at` DATETIME NOT NULL,
-  `updated_at` DATETIME NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
   `state` ENUM('icebox', 'todo', 'in-progress', 'done') NOT NULL DEFAULT 'todo',
   `priority` ENUM('low', 'medium', 'high'),
