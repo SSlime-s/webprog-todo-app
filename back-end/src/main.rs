@@ -1,3 +1,6 @@
+mod model;
+mod utils;
+
 use std::env;
 
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
