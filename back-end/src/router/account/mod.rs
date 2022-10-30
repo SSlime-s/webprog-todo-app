@@ -103,5 +103,5 @@ pub async fn login(
         return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
     }
 
-    HttpResponse::Ok().finish()
+    HttpResponse::NoContent().finish()
 }
