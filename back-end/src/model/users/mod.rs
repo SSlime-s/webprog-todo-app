@@ -62,13 +62,15 @@ pub async fn remove_user(
 }
 
 pub async fn get_user_from_username(
-    pool: &MySqlPool,
+    conn: impl Acquire<'_, Database = MySql>,
     username: &str,
 ) -> anyhow::Result<Option<crate::model::types::User>> {
+    let mut conn = conn.acquire().await?;
+
     let query = "SELECT * FROM `users` WHERE `username` = ?;";
     let row = sqlx::query_as::<_, crate::model::types::User>(query)
         .bind(username)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await?;
     Ok(row)
 }
