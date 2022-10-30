@@ -1,4 +1,4 @@
-use sqlx::{Acquire, MySql, MySqlPool, Row};
+use sqlx::{Acquire, MySql, Row};
 
 use crate::utils::ulid_to_binary;
 
@@ -70,6 +70,21 @@ pub async fn get_user_from_username(
     let query = "SELECT * FROM `users` WHERE `username` = ?;";
     let row = sqlx::query_as::<_, crate::model::types::User>(query)
         .bind(username)
+        .fetch_optional(&mut *conn)
+        .await?;
+    Ok(row)
+}
+
+pub async fn get_user(
+    conn: impl Acquire<'_, Database = MySql>,
+    id: ulid::Ulid,
+) -> anyhow::Result<Option<crate::model::types::User>> {
+    let mut conn = conn.acquire().await?;
+
+    let query = "SELECT * FROM `users` WHERE `id` = ? AND `deleted_at` IS NULL;";
+    let bin_id = ulid_to_binary(id);
+    let row = sqlx::query_as::<_, crate::model::types::User>(query)
+        .bind(bin_id.as_slice())
         .fetch_optional(&mut *conn)
         .await?;
     Ok(row)
