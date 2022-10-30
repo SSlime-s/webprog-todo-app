@@ -1,18 +1,28 @@
 mod model;
+mod router;
 mod utils;
 
 use std::env;
 
-use actix_web::{get, App, HttpResponse, HttpServer, Responder};
+use actix_session::{storage::CookieSessionStore, Session, SessionMiddleware};
+use actix_web::{cookie::Key, get, App, HttpResponse, HttpServer, Responder, web::Data};
 use dotenv::dotenv;
 use once_cell::sync::OnceCell;
 use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
 
+use crate::router::account::{login, signup};
+
 pub static POOL: OnceCell<MySqlPool> = OnceCell::new();
 
 #[get("/")]
-async fn hello_world() -> impl Responder {
-    HttpResponse::Ok().body("Hello world!")
+async fn hello_world(session: Session) -> impl Responder {
+    let user_id = session.get::<String>("user_id").unwrap();
+    log::info!("user_id: {:?}", user_id);
+    if let Some(user_id) = user_id {
+        HttpResponse::Ok().body(format!("Hello, {}!", user_id))
+    } else {
+        HttpResponse::Ok().body("Hello, world!")
+    }
 }
 
 #[actix_web::main]
@@ -26,6 +36,8 @@ async fn main() -> std::io::Result<()> {
     let username = env::var("MARIADB_USERNAME").unwrap();
     let password = env::var("MARIADB_PASSWORD").unwrap();
 
+    let secret_key = Key::generate();
+
     let pool = MySqlPoolOptions::new()
         .max_connections(10)
         .connect(&format!(
@@ -34,17 +46,25 @@ async fn main() -> std::io::Result<()> {
         ))
         .await
         .unwrap();
-    POOL.set(pool).unwrap();
+    // POOL.set(pool).unwrap();
 
     let query = "SHOW TABLES;";
-    let tables = sqlx::query(query)
-        .fetch_all(&*POOL.get().unwrap())
-        .await
-        .unwrap();
+    let tables = sqlx::query(query).fetch_all(&pool).await.unwrap();
     println!("Tables: {:?}", tables);
 
-    HttpServer::new(|| App::new().service(hello_world))
-        .bind(("0.0.0.0", 8080))?
-        .run()
-        .await
+    HttpServer::new(move || {
+        App::new()
+            .wrap(
+                SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
+                    .cookie_secure(false)
+                    .build(),
+            )
+            .app_data(Data::new(pool.clone()))
+            .service(hello_world)
+            .service(signup)
+            .service(login)
+    })
+    .bind(("0.0.0.0", 8080))?
+    .run()
+    .await
 }
