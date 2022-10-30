@@ -1,10 +1,10 @@
 use actix_session::Session;
-use actix_web::{post, web, HttpRequest, HttpResponse, Responder};
+use actix_web::{delete, post, web, HttpRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    model::users::{get_user_from_username, insert_user, is_username_exists},
-    utils::ulid_to_binary,
+    model::users::{get_user_from_username, insert_user, is_username_exists, remove_user},
+    utils::{binary_to_ulid, ulid_to_binary},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,9 +99,44 @@ pub async fn login(
         return HttpResponse::BadRequest().body("Invalid password");
     }
 
-    if let Err(e) = session.insert("user_id", std::str::from_utf8(&user.id).unwrap()) {
+    if let Err(e) = session.insert("user_id", binary_to_ulid(&user.id).unwrap().to_string()) {
         return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
     }
 
+    HttpResponse::NoContent().finish()
+}
+
+#[delete("/logout")]
+pub async fn logout(session: Session) -> impl Responder {
+    session.purge();
+    HttpResponse::NoContent().finish()
+}
+
+#[delete("/user")]
+pub async fn delete_user(
+    _req: HttpRequest,
+    session: Session,
+    pool: web::Data<sqlx::MySqlPool>,
+) -> impl Responder {
+    let user_id = session.get::<String>("user_id");
+    if user_id.is_err() {
+        return HttpResponse::InternalServerError().body("Internal server error");
+    }
+    let user_id = user_id.unwrap();
+    if user_id.is_none() {
+        return HttpResponse::BadRequest().body("Not logged in");
+    }
+    let user_id = user_id.unwrap();
+    let user_ulid = ulid::Ulid::from_string(&user_id);
+    if user_ulid.is_err() {
+        return HttpResponse::InternalServerError().body("Internal server error");
+    }
+    let user_ulid = user_ulid.unwrap();
+
+    if let Err(e) = remove_user(pool.as_ref(), user_ulid).await {
+        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+    }
+
+    session.purge();
     HttpResponse::NoContent().finish()
 }

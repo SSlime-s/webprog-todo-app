@@ -16,7 +16,8 @@ pub struct TagReq {
 #[derive(Debug, Clone, FromRow)]
 pub struct User {
     pub id: Vec<u8>,
-    pub username: String,
+    #[sqlx(default)]
+    pub username: Option<String>,
     pub display_name: String,
     pub hashed_password: Vec<u8>,
     pub created_at: chrono::NaiveDateTime,

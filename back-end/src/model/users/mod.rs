@@ -44,6 +44,23 @@ pub async fn insert_user(
     Ok(())
 }
 
+pub async fn remove_user(
+    conn: impl Acquire<'_, Database = MySql>,
+    id: ulid::Ulid,
+) -> anyhow::Result<()> {
+    let mut conn = conn.acquire().await?;
+
+    let query = "UPDATE `users` SET `deleted_at` = NOW(), `username` = NULL WHERE `id` = ?;";
+    let bin_id = ulid_to_binary(id);
+
+    sqlx::query(query)
+        .bind(bin_id.as_slice())
+        .execute(&mut *conn)
+        .await?;
+
+    Ok(())
+}
+
 pub async fn get_user_from_username(
     pool: &MySqlPool,
     username: &str,

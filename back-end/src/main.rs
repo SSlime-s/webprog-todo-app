@@ -10,7 +10,7 @@ use dotenv::dotenv;
 use once_cell::sync::OnceCell;
 use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
 
-use crate::router::account::{login, signup};
+use crate::router::account::{login, signup, logout, delete_user};
 
 pub static POOL: OnceCell<MySqlPool> = OnceCell::new();
 
@@ -64,6 +64,8 @@ async fn main() -> std::io::Result<()> {
             .service(hello_world)
             .service(signup)
             .service(login)
+            .service(logout)
+            .service(delete_user)
     })
     .bind(("0.0.0.0", 8080))?
     .run()
