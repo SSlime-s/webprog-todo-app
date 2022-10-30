@@ -5,7 +5,7 @@ mod utils;
 use std::env;
 
 use actix_session::{storage::CookieSessionStore, Session, SessionMiddleware};
-use actix_web::{cookie::Key, get, App, HttpResponse, HttpServer, Responder, web::Data};
+use actix_web::{cookie::Key, get, web::Data, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
 use once_cell::sync::OnceCell;
 use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
@@ -36,7 +36,8 @@ async fn main() -> std::io::Result<()> {
     let username = env::var("MARIADB_USERNAME").unwrap();
     let password = env::var("MARIADB_PASSWORD").unwrap();
 
-    let secret_key = Key::generate();
+    let secret_key = env::var("SECRET_KEY").unwrap();
+    let secret_key = Key::from(secret_key.as_bytes());
 
     let pool = MySqlPoolOptions::new()
         .max_connections(10)
