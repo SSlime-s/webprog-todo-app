@@ -77,7 +77,7 @@ pub async fn login(
         return HttpResponse::BadRequest().body("Invalid username or password");
     }
 
-    let user = get_user_from_username(&pool, &content.username).await;
+    let user = get_user_from_username(pool.as_ref(), &content.username).await;
     if user.is_err() {
         return HttpResponse::InternalServerError().body("Internal server error");
     }
