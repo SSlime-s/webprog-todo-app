@@ -1,11 +1,22 @@
 use actix_session::Session;
-use actix_web::{delete, post, web, HttpRequest, HttpResponse, Responder};
+use actix_web::{
+    delete, dev::HttpServiceFactory, get, post, web, HttpRequest, HttpResponse, Responder,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     model::users::{get_user_from_username, insert_user, is_username_exists, remove_user},
     utils::{binary_to_ulid, ulid_to_binary},
 };
+
+pub fn account_router() -> impl HttpServiceFactory {
+    web::scope("")
+        .service(post_signup)
+        .service(post_login)
+        .service(delete_logout)
+        .service(get_me)
+        .service(delete_me)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignupRequest {
@@ -15,7 +26,7 @@ pub struct SignupRequest {
 }
 
 #[post("/signup")]
-pub async fn signup(
+pub async fn post_signup(
     _req: HttpRequest,
     body: web::Json<SignupRequest>,
     session: Session,
@@ -66,7 +77,7 @@ pub async fn signup(
 }
 
 #[post("/login")]
-pub async fn login(
+pub async fn post_login(
     _req: HttpRequest,
     body: web::Json<SignupRequest>,
     session: Session,
@@ -107,13 +118,22 @@ pub async fn login(
 }
 
 #[delete("/logout")]
-pub async fn logout(session: Session) -> impl Responder {
+pub async fn delete_logout(session: Session) -> impl Responder {
     session.purge();
     HttpResponse::NoContent().finish()
 }
 
-#[delete("/user")]
-pub async fn delete_user(
+#[get("/me")]
+pub async fn get_me(session: Session) -> impl Responder {
+    if let Some(user_id) = session.get::<String>("user_id").unwrap() {
+        HttpResponse::Ok().body(user_id)
+    } else {
+        HttpResponse::Unauthorized().finish()
+    }
+}
+
+#[delete("/me")]
+pub async fn delete_me(
     _req: HttpRequest,
     session: Session,
     pool: web::Data<sqlx::MySqlPool>,

@@ -7,12 +7,9 @@ use std::env;
 use actix_session::{storage::CookieSessionStore, Session, SessionMiddleware};
 use actix_web::{cookie::Key, get, web::Data, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
-use once_cell::sync::OnceCell;
-use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
+use sqlx::mysql::MySqlPoolOptions;
 
-use crate::router::account::{login, signup, logout, delete_user};
-
-pub static POOL: OnceCell<MySqlPool> = OnceCell::new();
+use crate::router::account::account_router;
 
 #[get("/")]
 async fn hello_world(session: Session) -> impl Responder {
@@ -47,7 +44,6 @@ async fn main() -> std::io::Result<()> {
         ))
         .await
         .unwrap();
-    // POOL.set(pool).unwrap();
 
     let query = "SHOW TABLES;";
     let tables = sqlx::query(query).fetch_all(&pool).await.unwrap();
@@ -62,10 +58,7 @@ async fn main() -> std::io::Result<()> {
             )
             .app_data(Data::new(pool.clone()))
             .service(hello_world)
-            .service(signup)
-            .service(login)
-            .service(logout)
-            .service(delete_user)
+            .service(account_router())
     })
     .bind(("0.0.0.0", 8080))?
     .run()
