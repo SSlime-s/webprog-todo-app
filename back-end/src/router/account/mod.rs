@@ -5,7 +5,9 @@ use actix_web::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    model::users::{get_user_from_username, insert_user, is_username_exists, remove_user},
+    model::users::{
+        get_user, get_user_from_username, insert_user, is_username_exists, remove_user,
+    },
     utils::{binary_to_ulid, ulid_to_binary},
 };
 
@@ -123,10 +125,37 @@ pub async fn delete_logout(session: Session) -> impl Responder {
     HttpResponse::NoContent().finish()
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct MeResponse {
+    pub id: String,
+    pub username: String,
+    pub display_name: String,
+}
+
 #[get("/me")]
-pub async fn get_me(session: Session) -> impl Responder {
+pub async fn get_me(session: Session, pool: web::Data<sqlx::MySqlPool>) -> impl Responder {
     if let Some(user_id) = session.get::<String>("user_id").unwrap() {
-        HttpResponse::Ok().body(user_id)
+        let id = ulid::Ulid::from_string(&user_id).unwrap();
+
+        let user = get_user(pool.as_ref(), id).await;
+        if user.is_err() {
+            return HttpResponse::InternalServerError().body("Internal server error");
+        }
+        let user = user.unwrap();
+        if user.is_none() {
+            session.purge();
+            return HttpResponse::BadRequest().body("User does not exist, session purged");
+        }
+        let user = user.unwrap();
+        if user.username.is_none() {
+            return HttpResponse::InternalServerError().body("Internal server error");
+        }
+
+        HttpResponse::Ok().json(MeResponse {
+            id: user_id,
+            username: user.username.unwrap(),
+            display_name: user.display_name,
+        })
     } else {
         HttpResponse::Unauthorized().finish()
     }
