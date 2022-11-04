@@ -89,3 +89,19 @@ pub async fn get_user(
         .await?;
     Ok(row)
 }
+
+pub async fn is_valid_id(
+    conn: impl Acquire<'_, Database = MySql>,
+    id: ulid::Ulid,
+) -> anyhow::Result<bool> {
+    let mut conn = conn.acquire().await?;
+
+    let query = "SELECT COUNT(*) FROM `users` WHERE `id` = ? AND `deleted_at` IS NULL;";
+    let bin_id = ulid_to_binary(id);
+    let count = sqlx::query(query)
+        .bind(bin_id.as_slice())
+        .fetch_one(&mut *conn)
+        .await?
+        .get::<i32, _>(0);
+    Ok(count > 0)
+}
