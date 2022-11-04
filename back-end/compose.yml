@@ -37,6 +37,17 @@ services:
     ports:
       - "3306:3306"
 
+  phpmyadmin:
+    container_name: todo-app-phpmyadmin
+    image: phpmyadmin/phpmyadmin
+    environment:
+      PMA_HOST: todo-app-db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: root
+    ports:
+      - "8081:80"
+
 volumes:
   cargo-cache:
   target-cache:
