@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, MySql, Type, mysql::MySqlValueRef, error::BoxDynError};
+use sqlx::{error::BoxDynError, mysql::MySqlValueRef, FromRow, MySql, Type};
 
 #[derive(Debug, Clone, FromRow)]
 pub struct Tag {
@@ -126,7 +126,6 @@ impl Type<MySql> for TaskPriority {
         <str as Type<MySql>>::type_info()
     }
 }
-
 
 #[derive(Debug, Clone, FromRow)]
 pub struct Todo {
