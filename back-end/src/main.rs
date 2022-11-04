@@ -9,7 +9,7 @@ use actix_web::{cookie::Key, get, web::Data, App, HttpResponse, HttpServer, Resp
 use dotenv::dotenv;
 use sqlx::mysql::MySqlPoolOptions;
 
-use crate::router::account::account_router;
+use crate::router::{account::account_router, task::tasks_router};
 
 #[get("/")]
 async fn hello_world(session: Session) -> impl Responder {
@@ -59,6 +59,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(actix_web::middleware::Logger::default())
             .app_data(Data::new(pool.clone()))
             .service(hello_world)
+            .service(tasks_router())
             .service(account_router())
     })
     .bind(("0.0.0.0", 8080))?
