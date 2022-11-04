@@ -56,6 +56,7 @@ async fn main() -> std::io::Result<()> {
                     .cookie_secure(false)
                     .build(),
             )
+            .wrap(actix_web::middleware::Logger::default())
             .app_data(Data::new(pool.clone()))
             .service(hello_world)
             .service(account_router())
