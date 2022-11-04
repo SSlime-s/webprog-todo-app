@@ -70,7 +70,7 @@ pub async fn get_tasks_me(session: Session, pool: web::Data<sqlx::MySqlPool>) ->
     }
     let user_ulid = user_ulid.unwrap();
 
-    let tasks = model::tasks::get_tasks(pool.as_ref(), user_ulid, None, None, None).await;
+    let tasks = model::tasks::get_tasks(pool.as_ref(), user_ulid, None, None).await;
     if let Err(e) = tasks {
         return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
     }

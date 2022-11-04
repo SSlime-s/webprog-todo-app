@@ -31,22 +31,58 @@ impl Display for SortedBy {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Limit {
+    LimitOffset(usize, usize),
+    Limit(usize),
+}
+impl Limit {
+    pub fn to_query(self) -> String {
+        match self {
+            Self::LimitOffset(limit, offset) => format!("LIMIT {} OFFSET {}", limit, offset),
+            Self::Limit(limit) => format!("LIMIT {}", limit),
+        }
+    }
+
+    pub fn to_prepared_query(self) -> String {
+        match self {
+            Self::LimitOffset(_, _) => "LIMIT ? OFFSET ?".to_string(),
+            Self::Limit(_) => "LIMIT ?".to_string(),
+        }
+    }
+}
+
 pub async fn get_tasks(
     conn: impl Acquire<'_, Database = MySql>,
     author_id: ulid::Ulid,
-    limit: Option<usize>,
-    offset: Option<usize>,
+    limit: Option<Limit>,
     sorted_by: Option<SortedBy>,
 ) -> anyhow::Result<Vec<types::Todo>> {
     let mut conn = conn.acquire().await?;
 
-    let query = "SELECT * FROM `todos` WHERE `author_id` = ?;";
+    let query = format!(
+        "SELECT * FROM `todos` WHERE `author_id` = ? {};",
+        limit.map(|l| l.to_prepared_query()).unwrap_or_default()
+    );
 
     let bin_id = ulid_to_binary(author_id);
-    let rows = sqlx::query_as::<_, types::Todo>(query)
-        .bind(bin_id.as_slice())
-        .fetch_all(&mut *conn)
-        .await?;
+
+    let building_query = {
+        let mut building_query =
+            sqlx::query_as::<_, types::Todo>(query.as_str()).bind(bin_id.as_slice());
+
+        match limit {
+            Some(Limit::LimitOffset(limit, offset)) => {
+                building_query = building_query.bind(limit as i64).bind(offset as i64)
+            }
+            Some(Limit::Limit(limit)) => building_query = building_query.bind(limit as i64),
+            None => (),
+        }
+        building_query
+    };
+
+    let rows = building_query.fetch_all(&mut *conn).await?;
+
     Ok(rows)
 }
 
