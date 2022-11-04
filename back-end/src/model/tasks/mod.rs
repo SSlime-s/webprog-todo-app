@@ -1,6 +1,6 @@
 use std::{fmt::Display, str::FromStr};
 
-use sqlx::{Acquire, MySql};
+use sqlx::{mysql::MySqlArguments, Acquire, MySql};
 
 use crate::utils::ulid_to_binary;
 
@@ -109,6 +109,139 @@ pub async fn insert_task(
         .bind(task.due_date)
         .execute(&mut *conn)
         .await?;
+
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub enum Update<T> {
+    Set(T),
+    Nop,
+}
+impl<T> Update<T> {
+    pub fn unwrap(self) -> T {
+        match self {
+            Self::Set(t) => t,
+            Self::Nop => panic!("Update::Nop"),
+        }
+    }
+
+    pub fn is_nop(&self) -> bool {
+        matches!(self, Self::Nop)
+    }
+
+    pub fn is_set(&self) -> bool {
+        matches!(self, Self::Set(_))
+    }
+
+    pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Update<U> {
+        match self {
+            Self::Set(t) => Update::Set(f(t)),
+            Self::Nop => Update::Nop,
+        }
+    }
+
+    pub fn to_prepared_query(&self, column_name: &str) -> Option<String> {
+        match self {
+            Self::Set(_) => Some(format!("`{}` = ?", column_name)),
+            Self::Nop => None,
+        }
+    }
+}
+impl<'a, T> Update<T>
+where
+    &'a T: 'a + Send + sqlx::Encode<'a, sqlx::MySql> + sqlx::Type<sqlx::MySql>,
+{
+    pub fn bind_query(
+        &'a self,
+        query: sqlx::query::Query<'a, sqlx::MySql, MySqlArguments>,
+    ) -> sqlx::query::Query<'a, sqlx::MySql, MySqlArguments> {
+        match self {
+            Self::Set(t) => query.bind(t),
+            Self::Nop => query,
+        }
+    }
+}
+impl<T> Default for Update<T> {
+    fn default() -> Self {
+        Self::Nop
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UpdateTask {
+    pub title: Update<String>,
+    pub description: Update<String>,
+    pub state: Update<types::TaskState>,
+    pub priority: Update<Option<types::TaskPriority>>,
+    pub due_date: Update<Option<chrono::NaiveDateTime>>,
+}
+impl UpdateTask {
+    fn to_prepared_query(&self) -> String {
+        let mut query = Vec::new();
+
+        if let Some(q) = self.title.to_prepared_query("title") {
+            query.push(q);
+        }
+        if let Some(q) = self.description.to_prepared_query("description") {
+            query.push(q);
+        }
+        if let Some(q) = self.state.to_prepared_query("state") {
+            query.push(q);
+        }
+        if let Some(q) = self.priority.to_prepared_query("priority") {
+            query.push(q);
+        }
+        if let Some(q) = self.due_date.to_prepared_query("due_date") {
+            query.push(q);
+        }
+
+        query.join(", ")
+    }
+
+    pub fn bind_query<'a>(
+        &'a self,
+        query: sqlx::query::Query<'a, sqlx::MySql, MySqlArguments>,
+    ) -> sqlx::query::Query<'a, sqlx::MySql, MySqlArguments> {
+        let mut query = self.title.bind_query(query);
+        query = self.description.bind_query(query);
+        query = self.state.bind_query(query);
+        query = self.priority.bind_query(query);
+        query = self.due_date.bind_query(query);
+
+        query
+    }
+
+    pub fn is_nop(&self) -> bool {
+        self.title.is_nop()
+            && self.description.is_nop()
+            && self.state.is_nop()
+            && self.priority.is_nop()
+            && self.due_date.is_nop()
+    }
+}
+
+pub async fn update_task(
+    conn: impl Acquire<'_, Database = MySql>,
+    id: ulid::Ulid,
+    update: UpdateTask,
+) -> anyhow::Result<()> {
+    let mut conn = conn.acquire().await?;
+
+    if update.is_nop() {
+        return Ok(());
+    }
+
+    let query = format!(
+        "UPDATE `todos` SET {} WHERE `id` = ?;",
+        update.to_prepared_query()
+    );
+
+    let bin_id = ulid_to_binary(id);
+
+    let building_query = update.bind_query(sqlx::query(query.as_str()).bind(bin_id.as_slice()));
+
+    building_query.execute(&mut *conn).await?;
 
     Ok(())
 }
