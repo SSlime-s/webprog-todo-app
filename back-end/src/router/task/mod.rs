@@ -139,3 +139,45 @@ pub async fn post_task(
 
     HttpResponse::Created().finish()
 }
+
+#[get("/{id}")]
+pub async fn get_task(
+    _req: HttpRequest,
+    id: web::Path<String>,
+    session: Session,
+    pool: web::Data<sqlx::MySqlPool>,
+) -> impl Responder {
+    let user_ulid = check_is_logged_in(session, pool.as_ref()).await;
+    if let Err(e) = user_ulid {
+        return HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e));
+    }
+    let user_ulid = user_ulid.unwrap();
+
+    let task_ulid = ulid::Ulid::from_string(&id);
+    if let Err(e) = task_ulid {
+        return HttpResponse::BadRequest().body(format!("Bad Request: {}", e));
+    }
+    let task_ulid = task_ulid.unwrap();
+
+    let task = model::tasks::get_task(pool.as_ref(), task_ulid).await;
+    if let Err(e) = task {
+        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+    }
+    let task = task.unwrap();
+
+    if task.is_none() {
+        return HttpResponse::NotFound().body("Not Found");
+    }
+    let task = task.unwrap();
+
+    if task.author_id != Some(ulid_to_binary(user_ulid).to_vec()) {
+        return HttpResponse::Forbidden().body("Forbidden");
+    }
+
+    let task = TaskResponse::try_from(task);
+    if let Err(e) = task {
+        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+    }
+
+    HttpResponse::Ok().json(task.unwrap())
+}
