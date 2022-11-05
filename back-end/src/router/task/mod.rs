@@ -14,7 +14,7 @@ pub fn tasks_router() -> impl HttpServiceFactory {
     web::scope("/tasks")
         .service(get_tasks_me)
         .service(post_task)
-    // .service(get_task)
+        .service(get_task)
     // .service(delete_task)
     // .service(put_task)
 }
