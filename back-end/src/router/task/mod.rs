@@ -66,34 +66,37 @@ impl TryFrom<Todo> for TaskResponse {
 
 #[get("/me")]
 pub async fn get_tasks_me(session: Session, pool: web::Data<sqlx::MySqlPool>) -> impl Responder {
-    let user_ulid = check_is_logged_in(session, pool.as_ref()).await;
-    if let Err(e) = user_ulid {
-        return HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e));
-    }
-    let user_ulid = user_ulid.unwrap();
+    async fn get_tasks_me_inner(
+        session: Session,
+        pool: web::Data<sqlx::MySqlPool>,
+    ) -> Result<HttpResponse, HttpResponse> {
+        let user_ulid = check_is_logged_in(session, pool.as_ref())
+            .await
+            .map_err(|e| HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e)))?;
 
-    let tasks = model::tasks::get_tasks(pool.as_ref(), user_ulid, None, None).await;
-    if let Err(e) = tasks {
-        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
-    }
-    let tasks = tasks.unwrap();
+        let tasks = model::tasks::get_tasks(pool.as_ref(), user_ulid, None, None)
+            .await
+            .map_err(|e| {
+                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+            })?
+            .into_iter()
+            .map(TaskResponse::try_from)
+            .fold(Ok(Vec::new()), |acc: anyhow::Result<_>, task| {
+                let mut acc = acc?;
+                let task = task?;
+                acc.push(task);
+                Ok(acc)
+            })
+            .map_err(|e| {
+                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+            })?;
 
-    let tasks = tasks
-        .into_iter()
-        .map(TaskResponse::try_from)
-        .fold(Ok(Vec::new()), |acc, x| {
-            if let Err(e) = x {
-                return Err(e);
-            }
-            let mut acc = acc?;
-            acc.push(x.unwrap());
-            Ok(acc)
-        });
-    if let Err(e) = tasks {
-        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+        Ok(HttpResponse::Ok().json(tasks))
     }
 
-    HttpResponse::Ok().json(tasks.unwrap())
+    get_tasks_me_inner(session, pool)
+        .await
+        .unwrap_or_else(std::convert::identity)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,34 +115,44 @@ pub async fn post_task(
     session: Session,
     pool: web::Data<sqlx::MySqlPool>,
 ) -> impl Responder {
-    let user_ulid = check_is_logged_in(session, pool.as_ref()).await;
-    if let Err(e) = user_ulid {
-        return HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e));
-    }
-    let user_ulid = user_ulid.unwrap();
-    let task_ulid = ulid::Ulid::new();
+    async fn post_task_inner(
+        _req: HttpRequest,
+        body: web::Json<PostTaskRequest>,
+        session: Session,
+        pool: web::Data<sqlx::MySqlPool>,
+    ) -> Result<HttpResponse, HttpResponse> {
+        let user_ulid = check_is_logged_in(session, pool.as_ref())
+            .await
+            .map_err(|e| HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e)))?;
 
-    let result = model::tasks::insert_task(
-        pool.as_ref(),
-        TodoReq {
-            id: ulid_to_binary(task_ulid).to_vec(),
-            author_id: Some(ulid_to_binary(user_ulid).to_vec()),
-            title: body.title.clone(),
-            description: body.description.clone(),
-            state: body.state,
-            priority: Some(body.priority),
-            due_date: body.due_date.as_ref().map(|d| {
-                chrono::NaiveDateTime::parse_from_str(d, "%Y-%m-%d %H:%M:%S")
-                    .expect("Invalid due_date")
-            }),
-        },
-    )
-    .await;
-    if let Err(e) = result {
-        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+        let task_ulid = ulid::Ulid::new();
+
+        model::tasks::insert_task(
+            pool.as_ref(),
+            TodoReq {
+                id: ulid_to_binary(task_ulid).to_vec(),
+                author_id: Some(ulid_to_binary(user_ulid).to_vec()),
+                title: body.title.clone(),
+                description: body.description.clone(),
+                state: body.state,
+                priority: Some(body.priority),
+                due_date: body.due_date.as_ref().map(|d| {
+                    chrono::NaiveDateTime::parse_from_str(d, "%Y-%m-%d %H:%M:%S")
+                        .expect("Invalid due_date")
+                }),
+            },
+        )
+        .await
+        .map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+        })?;
+
+        Ok(HttpResponse::Created().finish())
     }
 
-    HttpResponse::Created().finish()
+    post_task_inner(_req, body, session, pool)
+        .await
+        .unwrap_or_else(std::convert::identity)
 }
 
 #[get("/{id}")]
@@ -149,39 +162,40 @@ pub async fn get_task(
     session: Session,
     pool: web::Data<sqlx::MySqlPool>,
 ) -> impl Responder {
-    let user_ulid = check_is_logged_in(session, pool.as_ref()).await;
-    if let Err(e) = user_ulid {
-        return HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e));
-    }
-    let user_ulid = user_ulid.unwrap();
+    async fn get_task_inner(
+        _req: HttpRequest,
+        id: web::Path<String>,
+        session: Session,
+        pool: web::Data<sqlx::MySqlPool>,
+    ) -> Result<HttpResponse, HttpResponse> {
+        let user_ulid = check_is_logged_in(session, pool.as_ref())
+            .await
+            .map_err(|e| HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e)))?;
 
-    let task_ulid = ulid::Ulid::from_string(&id);
-    if let Err(e) = task_ulid {
-        return HttpResponse::BadRequest().body(format!("Bad Request: {}", e));
-    }
-    let task_ulid = task_ulid.unwrap();
+        let task_ulid = ulid::Ulid::from_string(&id)
+            .map_err(|e| HttpResponse::BadRequest().body(format!("Invalid task id: {}", e)))?;
 
-    let task = model::tasks::get_task(pool.as_ref(), task_ulid).await;
-    if let Err(e) = task {
-        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
-    }
-    let task = task.unwrap();
+        let task = model::tasks::get_task(pool.as_ref(), task_ulid)
+            .await
+            .map_err(|e| {
+                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+            })?
+            .ok_or_else(|| HttpResponse::NotFound().body("Not Found"))?;
 
-    if task.is_none() {
-        return HttpResponse::NotFound().body("Not Found");
-    }
-    let task = task.unwrap();
+        if task.author_id != Some(ulid_to_binary(user_ulid).to_vec()) {
+            return Err(HttpResponse::Forbidden().body("Forbidden"));
+        }
 
-    if task.author_id != Some(ulid_to_binary(user_ulid).to_vec()) {
-        return HttpResponse::Forbidden().body("Forbidden");
-    }
-
-    let task = TaskResponse::try_from(task);
-    if let Err(e) = task {
-        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+        Ok(
+            HttpResponse::Ok().json(TaskResponse::try_from(task).map_err(|e| {
+                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+            })?),
+        )
     }
 
-    HttpResponse::Ok().json(task.unwrap())
+    get_task_inner(_req, id, session, pool)
+        .await
+        .unwrap_or_else(std::convert::identity)
 }
 
 #[delete("/{id}")]
@@ -191,47 +205,48 @@ pub async fn delete_task(
     session: Session,
     pool: web::Data<sqlx::MySqlPool>,
 ) -> impl Responder {
-    let tx = pool.begin().await;
-    if let Err(e) = tx {
-        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
-    }
-    let mut tx = tx.unwrap();
+    async fn delete_task_inner(
+        _req: HttpRequest,
+        id: web::Path<String>,
+        session: Session,
+        pool: web::Data<sqlx::MySqlPool>,
+    ) -> Result<HttpResponse, HttpResponse> {
+        let mut tx = pool.begin().await.map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+        })?;
 
-    let user_ulid = check_is_logged_in(session, &mut tx).await;
-    if let Err(e) = user_ulid {
-        return HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e));
-    }
-    let user_ulid = user_ulid.unwrap();
+        let user_ulid = check_is_logged_in(session, &mut tx)
+            .await
+            .map_err(|e| HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e)))?;
 
-    let task_ulid = ulid::Ulid::from_string(&id);
-    if let Err(e) = task_ulid {
-        return HttpResponse::BadRequest().body(format!("Bad Request: {}", e));
-    }
-    let task_ulid = task_ulid.unwrap();
+        let task_ulid = ulid::Ulid::from_string(&id)
+            .map_err(|e| HttpResponse::BadRequest().body(format!("Invalid task id: {}", e)))?;
 
-    let task = model::tasks::get_task(&mut tx, task_ulid).await;
-    if let Err(e) = task {
-        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
-    }
-    let task = task.unwrap();
+        let task = model::tasks::get_task(&mut tx, task_ulid)
+            .await
+            .map_err(|e| {
+                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+            })?
+            .ok_or_else(|| HttpResponse::NotFound().body("Not Found"))?;
 
-    if task.is_none() {
-        return HttpResponse::NotFound().body("Not Found");
-    }
-    let task = task.unwrap();
+        if task.author_id != Some(ulid_to_binary(user_ulid).to_vec()) {
+            return Err(HttpResponse::Forbidden().body("Forbidden"));
+        }
 
-    if task.author_id != Some(ulid_to_binary(user_ulid).to_vec()) {
-        return HttpResponse::Forbidden().body("Forbidden");
-    }
+        model::tasks::delete_task(&mut tx, task_ulid)
+            .await
+            .map_err(|e| {
+                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+            })?;
 
-    let result = model::tasks::delete_task(&mut tx, task_ulid).await;
-    if let Err(e) = result {
-        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
-    }
+        tx.commit().await.map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+        })?;
 
-    if let Err(e) = tx.commit().await {
-        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+        Ok(HttpResponse::NoContent().finish())
     }
 
-    HttpResponse::NoContent().finish()
+    delete_task_inner(_req, id, session, pool)
+        .await
+        .unwrap_or_else(std::convert::identity)
 }
