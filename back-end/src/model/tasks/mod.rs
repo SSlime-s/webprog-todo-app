@@ -166,6 +166,24 @@ impl<T> Update<T> {
         }
     }
 }
+impl<T> Update<Option<T>> {
+    pub fn transpose(self) -> Option<Update<T>> {
+        match self {
+            Self::Set(Some(t)) => Some(Update::Set(t)),
+            Self::Set(None) => None,
+            Self::Nop => Some(Update::Nop),
+        }
+    }
+}
+impl<T, E> Update<Result<T, E>> {
+    pub fn transpose(self) -> Result<Update<T>, E> {
+        match self {
+            Self::Set(Ok(t)) => Ok(Update::Set(t)),
+            Self::Set(Err(e)) => Err(e),
+            Self::Nop => Ok(Update::Nop),
+        }
+    }
+}
 impl<'a, T> Update<T>
 where
     &'a T: 'a + Send + sqlx::Encode<'a, sqlx::MySql> + sqlx::Type<sqlx::MySql>,
@@ -183,6 +201,18 @@ where
 impl<T> Default for Update<T> {
     fn default() -> Self {
         Self::Nop
+    }
+}
+impl<'de, T> serde::Deserialize<'de> for Update<T>
+where
+    T: serde::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let t = T::deserialize(deserializer)?;
+        Ok(Self::Set(t))
     }
 }
 
