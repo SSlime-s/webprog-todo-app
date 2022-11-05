@@ -65,17 +65,39 @@ impl TryFrom<Todo> for TaskResponse {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetTaskQuery {
+    limit: Option<usize>,
+    offset: Option<usize>,
+
+    state: Option<TaskState>,
+    priority: Option<TaskPriority>,
+}
 #[get("/me")]
-pub async fn get_tasks_me(session: Session, pool: web::Data<sqlx::MySqlPool>) -> impl Responder {
+pub async fn get_tasks_me(
+    session: Session,
+    pool: web::Data<sqlx::MySqlPool>,
+    query: web::Query<GetTaskQuery>,
+) -> impl Responder {
     async fn get_tasks_me_inner(
         session: Session,
         pool: web::Data<sqlx::MySqlPool>,
+        query: web::Query<GetTaskQuery>,
     ) -> Result<HttpResponse, HttpResponse> {
         let user_ulid = check_is_logged_in(session, pool.as_ref())
             .await
             .map_err(|e| HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e)))?;
 
-        let tasks = model::tasks::get_tasks(pool.as_ref(), user_ulid, None, None)
+        let limit = match (query.limit, query.offset) {
+            (Some(limit), Some(offset)) => Some(model::tasks::Limit::LimitOffset(limit, offset)),
+            (Some(limit), None) => Some(model::tasks::Limit::Limit(limit)),
+            (None, Some(_)) => {
+                return Err(HttpResponse::BadRequest().body("Invalid query"));
+            }
+            (None, None) => None,
+        };
+
+        let tasks = model::tasks::get_tasks(pool.as_ref(), user_ulid, limit, None)
             .await
             .map_err(|e| {
                 HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
@@ -90,7 +112,7 @@ pub async fn get_tasks_me(session: Session, pool: web::Data<sqlx::MySqlPool>) ->
         Ok(HttpResponse::Ok().json(tasks))
     }
 
-    get_tasks_me_inner(session, pool)
+    get_tasks_me_inner(session, pool, query)
         .await
         .unwrap_or_else(std::convert::identity)
 }
