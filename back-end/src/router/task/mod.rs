@@ -1,5 +1,7 @@
 use actix_session::Session;
-use actix_web::{dev::HttpServiceFactory, get, post, web, HttpRequest, HttpResponse, Responder};
+use actix_web::{
+    delete, dev::HttpServiceFactory, get, post, web, HttpRequest, HttpResponse, Responder,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -15,7 +17,7 @@ pub fn tasks_router() -> impl HttpServiceFactory {
         .service(get_tasks_me)
         .service(post_task)
         .service(get_task)
-    // .service(delete_task)
+        .service(delete_task)
     // .service(put_task)
 }
 
@@ -180,4 +182,56 @@ pub async fn get_task(
     }
 
     HttpResponse::Ok().json(task.unwrap())
+}
+
+#[delete("/{id}")]
+pub async fn delete_task(
+    _req: HttpRequest,
+    id: web::Path<String>,
+    session: Session,
+    pool: web::Data<sqlx::MySqlPool>,
+) -> impl Responder {
+    let tx = pool.begin().await;
+    if let Err(e) = tx {
+        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+    }
+    let mut tx = tx.unwrap();
+
+    let user_ulid = check_is_logged_in(session, &mut tx).await;
+    if let Err(e) = user_ulid {
+        return HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e));
+    }
+    let user_ulid = user_ulid.unwrap();
+
+    let task_ulid = ulid::Ulid::from_string(&id);
+    if let Err(e) = task_ulid {
+        return HttpResponse::BadRequest().body(format!("Bad Request: {}", e));
+    }
+    let task_ulid = task_ulid.unwrap();
+
+    let task = model::tasks::get_task(&mut tx, task_ulid).await;
+    if let Err(e) = task {
+        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+    }
+    let task = task.unwrap();
+
+    if task.is_none() {
+        return HttpResponse::NotFound().body("Not Found");
+    }
+    let task = task.unwrap();
+
+    if task.author_id != Some(ulid_to_binary(user_ulid).to_vec()) {
+        return HttpResponse::Forbidden().body("Forbidden");
+    }
+
+    let result = model::tasks::delete_task(&mut tx, task_ulid).await;
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+    }
+
+    if let Err(e) = tx.commit().await {
+        return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
+    }
+
+    HttpResponse::NoContent().finish()
 }
