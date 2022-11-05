@@ -81,12 +81,7 @@ pub async fn get_tasks_me(session: Session, pool: web::Data<sqlx::MySqlPool>) ->
             })?
             .into_iter()
             .map(TaskResponse::try_from)
-            .fold(Ok(Vec::new()), |acc: anyhow::Result<_>, task| {
-                let mut acc = acc?;
-                let task = task?;
-                acc.push(task);
-                Ok(acc)
-            })
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|e| {
                 HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
             })?;
