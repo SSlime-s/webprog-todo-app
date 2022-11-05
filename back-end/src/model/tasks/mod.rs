@@ -245,3 +245,21 @@ pub async fn update_task(
 
     Ok(())
 }
+
+pub async fn delete_task(
+    conn: impl Acquire<'_, Database = MySql>,
+    id: ulid::Ulid,
+) -> anyhow::Result<()> {
+    let mut conn = conn.acquire().await?;
+
+    let query = "DELETE FROM `todos` WHERE `id` = ?;";
+
+    let bin_id = ulid_to_binary(id);
+
+    sqlx::query(query)
+        .bind(bin_id.as_slice())
+        .execute(&mut *conn)
+        .await?;
+
+    Ok(())
+}
