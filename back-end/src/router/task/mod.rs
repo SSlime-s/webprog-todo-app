@@ -1,12 +1,13 @@
 use actix_session::Session;
 use actix_web::{
-    delete, dev::HttpServiceFactory, get, post, web, HttpRequest, HttpResponse, Responder,
+    delete, dev::HttpServiceFactory, get, post, put, web, HttpRequest, HttpResponse, Responder,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     model::{
         self,
+        tasks::Update,
         types::{TaskPriority, TaskState, Todo, TodoReq},
     },
     utils::{binary_to_ulid, check_is_logged_in, ulid_to_binary},
@@ -18,7 +19,7 @@ pub fn tasks_router() -> impl HttpServiceFactory {
         .service(post_task)
         .service(get_task)
         .service(delete_task)
-    // .service(put_task)
+        .service(put_task)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,7 +100,7 @@ pub struct PostTaskRequest {
     pub title: String,
     pub description: String,
     pub state: TaskState,
-    pub priority: TaskPriority,
+    pub priority: Option<TaskPriority>,
     pub due_date: Option<String>,
 }
 
@@ -130,7 +131,7 @@ pub async fn post_task(
                 title: body.title.clone(),
                 description: body.description.clone(),
                 state: body.state,
-                priority: Some(body.priority),
+                priority: body.priority,
                 due_date: body.due_date.as_ref().map(|d| {
                     chrono::NaiveDateTime::parse_from_str(d, "%Y-%m-%d %H:%M:%S")
                         .expect("Invalid due_date")
@@ -242,6 +243,93 @@ pub async fn delete_task(
     }
 
     delete_task_inner(_req, id, session, pool)
+        .await
+        .unwrap_or_else(std::convert::identity)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PutTaskRequest {
+    #[serde(default)]
+    pub title: Update<String>,
+    #[serde(default)]
+    pub description: Update<String>,
+    #[serde(default)]
+    pub state: Update<TaskState>,
+    #[serde(default)]
+    pub priority: Update<Option<TaskPriority>>,
+    #[serde(default)]
+    pub due_date: Update<Option<String>>,
+}
+#[put("/{id}")]
+pub async fn put_task(
+    _req: HttpRequest,
+    id: web::Path<String>,
+    body: web::Json<PutTaskRequest>,
+    session: Session,
+    pool: web::Data<sqlx::MySqlPool>,
+) -> impl Responder {
+    async fn put_task_inner(
+        _req: HttpRequest,
+        id: web::Path<String>,
+        body: web::Json<PutTaskRequest>,
+        session: Session,
+        pool: web::Data<sqlx::MySqlPool>,
+    ) -> Result<HttpResponse, HttpResponse> {
+        let mut tx = pool.begin().await.map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+        })?;
+
+        let user_ulid = check_is_logged_in(session, &mut tx)
+            .await
+            .map_err(|e| HttpResponse::Unauthorized().body(format!("Unauthorized: {}", e)))?;
+
+        let task_ulid = ulid::Ulid::from_string(&id)
+            .map_err(|e| HttpResponse::BadRequest().body(format!("Invalid task id: {}", e)))?;
+
+        let task = model::tasks::get_task(&mut tx, task_ulid)
+            .await
+            .map_err(|e| {
+                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+            })?
+            .ok_or_else(|| HttpResponse::NotFound().body("Not Found"))?;
+
+        if task.author_id != Some(ulid_to_binary(user_ulid).to_vec()) {
+            return Err(HttpResponse::Forbidden().body("Forbidden"));
+        }
+
+        let task_req = model::tasks::UpdateTask {
+            title: body.title.clone(),
+            description: body.description.clone(),
+            state: body.state.clone(),
+            priority: body.priority.clone(),
+            due_date: body
+                .due_date
+                .clone()
+                .map(|d| {
+                    d.map(|s| {
+                        chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d").map_err(|e| {
+                            HttpResponse::BadRequest().body(format!("Invalid due date: {}", e))
+                        })
+                    })
+                    .transpose()
+                })
+                .transpose()?,
+        };
+
+        model::tasks::update_task(&mut tx, task_ulid, task_req)
+            .await
+            .map_err(|e| {
+                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+            })?;
+
+        tx.commit().await.map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+        })?;
+
+        Ok(HttpResponse::NoContent().finish())
+    }
+
+    put_task_inner(_req, id, body, session, pool)
         .await
         .unwrap_or_else(std::convert::identity)
 }
