@@ -240,7 +240,7 @@ pub async fn delete_task(
         let task_ulid = ulid::Ulid::from_string(&id)
             .map_err(|e| HttpResponse::BadRequest().body(format!("Invalid task id: {}", e)))?;
 
-        let task = model::tasks::get_task(&mut tx, task_ulid)
+        let task = model::tasks::get_task_with_lock(&mut tx, task_ulid)
             .await
             .map_err(|e| {
                 HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
@@ -308,7 +308,7 @@ pub async fn put_task(
         let task_ulid = ulid::Ulid::from_string(&id)
             .map_err(|e| HttpResponse::BadRequest().body(format!("Invalid task id: {}", e)))?;
 
-        let task = model::tasks::get_task(&mut tx, task_ulid)
+        let task = model::tasks::get_task_with_lock(&mut tx, task_ulid)
             .await
             .map_err(|e| {
                 HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))

@@ -104,6 +104,24 @@ pub async fn get_task(
     Ok(row)
 }
 
+pub async fn get_task_with_lock(
+    conn: impl Acquire<'_, Database = MySql>,
+    task_id: ulid::Ulid,
+) -> anyhow::Result<Option<types::Todo>> {
+    let mut conn = conn.acquire().await?;
+
+    let query = "SELECT * FROM `todos` WHERE `id` = ? FOR UPDATE;";
+
+    let bin_task_id = ulid_to_binary(task_id);
+
+    let row = sqlx::query_as::<_, types::Todo>(query)
+        .bind(bin_task_id.as_slice())
+        .fetch_optional(&mut *conn)
+        .await?;
+
+    Ok(row)
+}
+
 pub async fn insert_task(
     conn: impl Acquire<'_, Database = MySql>,
     task: types::TodoReq,
