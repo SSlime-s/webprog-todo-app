@@ -4,8 +4,9 @@ mod utils;
 
 use std::env;
 
+use actix_cors::Cors;
 use actix_session::{storage::CookieSessionStore, Session, SessionMiddleware};
-use actix_web::{cookie::Key, get, web::Data, App, HttpResponse, HttpServer, Responder};
+use actix_web::{cookie::Key, get, http, web::Data, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
 use sqlx::mysql::MySqlPoolOptions;
 
@@ -50,7 +51,10 @@ async fn main() -> std::io::Result<()> {
     println!("Tables: {:?}", tables);
 
     HttpServer::new(move || {
+        let cors = use_cors_middleware();
+
         App::new()
+            .wrap(cors)
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
                     .cookie_secure(false)
@@ -65,4 +69,18 @@ async fn main() -> std::io::Result<()> {
     .bind(("0.0.0.0", 8080))?
     .run()
     .await
+}
+
+fn use_cors_middleware() -> Cors {
+    Cors::default()
+        .allowed_origin("http://localhost:3000")
+        .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+        .allowed_headers(vec![
+            http::header::AUTHORIZATION,
+            http::header::ACCEPT,
+            http::header::CONTENT_TYPE,
+            http::header::SET_COOKIE,
+        ])
+        .supports_credentials()
+        .max_age(3600)
 }

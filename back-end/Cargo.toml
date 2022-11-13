@@ -22,3 +22,4 @@ sqlx = { version = "0.6", features = [
 ulid = "1"
 bcrypt = "0.13"
 log = "0.4"
+actix-cors = "0.6"

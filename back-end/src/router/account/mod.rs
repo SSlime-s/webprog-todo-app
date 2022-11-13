@@ -78,10 +78,15 @@ pub async fn post_signup(
     HttpResponse::Created().finish()
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
 #[post("/login")]
 pub async fn post_login(
     _req: HttpRequest,
-    body: web::Json<SignupRequest>,
+    body: web::Json<LoginRequest>,
     session: Session,
     pool: web::Data<sqlx::MySqlPool>,
 ) -> impl Responder {
@@ -236,6 +241,19 @@ pub async fn put_me(
     };
 
     HttpResponse::NoContent().finish()
+}
+
+#[get("/available/{username}")]
+pub async fn get_available(
+    _req: HttpRequest,
+    username: web::Path<String>,
+    pool: web::Data<sqlx::MySqlPool>,
+) -> impl Responder {
+    let Ok(available) = model::users::is_username_exists(pool.as_ref(), &username).await else {
+        return HttpResponse::InternalServerError().body("Internal server error");
+    };
+
+    HttpResponse::Ok().json(available)
 }
 
 pub fn hash_password(
