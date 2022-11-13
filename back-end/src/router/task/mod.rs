@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     model::{
         self,
-        tasks::Update,
         types::{TaskPriority, TaskState, Todo, TodoReq},
+        Update,
     },
     utils::{binary_to_ulid, check_is_logged_in, ulid_to_binary},
 };
