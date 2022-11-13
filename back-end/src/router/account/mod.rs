@@ -1,6 +1,7 @@
 use actix_session::Session;
 use actix_web::{
-    delete, dev::HttpServiceFactory, get, post, put, web, HttpRequest, HttpResponse, Responder,
+    delete, dev::HttpServiceFactory, get, patch, post, web, HttpRequest, HttpResponse,
+    Responder,
 };
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +21,7 @@ pub fn account_router() -> impl HttpServiceFactory {
         .service(delete_logout)
         .service(get_me)
         .service(delete_me)
+        .service(patch_me)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,8 +206,8 @@ pub struct PutUserRequest {
     #[serde(default)]
     pub password: Update<String>,
 }
-#[put("/me")]
-pub async fn put_me(
+#[patch("/me")]
+pub async fn patch_me(
     _req: HttpRequest,
     body: web::Json<PutUserRequest>,
     session: Session,

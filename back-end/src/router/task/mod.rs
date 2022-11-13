@@ -1,6 +1,6 @@
 use actix_session::Session;
 use actix_web::{
-    delete, dev::HttpServiceFactory, get, post, put, web, HttpRequest, HttpResponse, Responder,
+    delete, dev::HttpServiceFactory, get, patch, post, web, HttpRequest, HttpResponse, Responder,
 };
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +19,7 @@ pub fn tasks_router() -> impl HttpServiceFactory {
         .service(post_task)
         .service(get_task)
         .service(delete_task)
-        .service(put_task)
+        .service(patch_task)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -282,8 +282,8 @@ pub struct PutTaskRequest {
     #[serde(default)]
     pub due_date: Update<Option<String>>,
 }
-#[put("/{id}")]
-pub async fn put_task(
+#[patch("/{id}")]
+pub async fn patch_task(
     _req: HttpRequest,
     id: web::Path<String>,
     body: web::Json<PutTaskRequest>,
