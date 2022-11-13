@@ -1,6 +1,8 @@
-use sqlx::{Acquire, MySql, Row};
+use sqlx::{mysql::MySqlArguments, Acquire, MySql, Row};
 
 use crate::utils::ulid_to_binary;
+
+use super::Update;
 
 pub async fn is_username_exists(
     conn: impl Acquire<'_, Database = MySql>,
@@ -57,6 +59,70 @@ pub async fn remove_user(
         .bind(bin_id.as_slice())
         .execute(&mut *conn)
         .await?;
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UpdateUser {
+    pub username: Update<String>,
+    pub display_name: Update<String>,
+    pub hashed_password: Update<Vec<u8>>,
+}
+impl UpdateUser {
+    pub fn to_prepared_query(&self) -> String {
+        let mut query = Vec::new();
+
+        if let Some(q) = self.username.to_prepared_query("username") {
+            query.push(q);
+        }
+        if let Some(q) = self.display_name.to_prepared_query("display_name") {
+            query.push(q);
+        }
+        if let Some(q) = self.hashed_password.to_prepared_query("hashed_password") {
+            query.push(q);
+        }
+
+        query.join(", ")
+    }
+
+    pub fn bind_query<'a>(
+        &'a self,
+        query: sqlx::query::Query<'a, sqlx::MySql, MySqlArguments>,
+    ) -> sqlx::query::Query<'a, sqlx::MySql, MySqlArguments> {
+        let mut query = self.username.bind_query(query);
+        query = self.display_name.bind_query(query);
+        query = self.hashed_password.bind_query(query);
+        query
+    }
+
+    pub fn is_nop(&self) -> bool {
+        self.display_name.is_nop() && self.hashed_password.is_nop()
+    }
+}
+
+pub async fn update_user(
+    conn: impl Acquire<'_, Database = MySql>,
+    id: ulid::Ulid,
+    update: UpdateUser,
+) -> anyhow::Result<()> {
+    let mut conn = conn.acquire().await?;
+
+    if update.is_nop() {
+        return Ok(());
+    }
+
+    let query = format!(
+        "UPDATE `users` SET {} WHERE `id` = ?;",
+        update.to_prepared_query()
+    );
+    let bin_id = ulid_to_binary(id);
+
+    let building_query = update
+        .bind_query(sqlx::query(query.as_str()))
+        .bind(bin_id.as_slice());
+
+    building_query.execute(&mut *conn).await?;
 
     Ok(())
 }

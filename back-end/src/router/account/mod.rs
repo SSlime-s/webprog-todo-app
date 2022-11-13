@@ -1,14 +1,16 @@
 use actix_session::Session;
 use actix_web::{
-    delete, dev::HttpServiceFactory, get, post, web, HttpRequest, HttpResponse, Responder,
+    delete, dev::HttpServiceFactory, get, post, put, web, HttpRequest, HttpResponse, Responder,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    model::users::{
-        get_user, get_user_from_username, insert_user, is_username_exists, remove_user,
+    model::{
+        self,
+        users::{get_user, get_user_from_username, insert_user, is_username_exists, remove_user},
+        Update,
     },
-    utils::{binary_to_ulid, ulid_to_binary},
+    utils::{binary_to_ulid, check_is_logged_in, ulid_to_binary},
 };
 
 pub fn account_router() -> impl HttpServiceFactory {
@@ -50,9 +52,7 @@ pub async fn post_signup(
 
     let id = ulid::Ulid::new();
 
-    let hashed_password =
-        bcrypt::hash_with_salt(content.password, bcrypt::DEFAULT_COST, ulid_to_binary(id))
-            .map(|s| s.to_string());
+    let hashed_password = hash_password(&content.password, &id);
     if let Err(e) = hashed_password {
         return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
     }
@@ -188,4 +188,60 @@ pub async fn delete_me(
 
     session.purge();
     HttpResponse::NoContent().finish()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PutUserRequest {
+    #[serde(default)]
+    pub username: Update<String>,
+    #[serde(default)]
+    pub display_name: Update<String>,
+    #[serde(default)]
+    pub password: Update<String>,
+}
+#[put("/me")]
+pub async fn put_me(
+    _req: HttpRequest,
+    body: web::Json<PutUserRequest>,
+    session: Session,
+    pool: web::Data<sqlx::MySqlPool>,
+) -> impl Responder {
+    let Ok(mut tx) = pool.begin().await else {
+        return HttpResponse::InternalServerError().body("Internal server error");
+    };
+
+    let Ok(user_ulid) = check_is_logged_in(session, &mut tx).await else {
+        return HttpResponse::Unauthorized().finish();
+    };
+
+    let password = body.password.clone();
+    let Ok(hashed_password) = password.map(|password| {
+        hash_password(&password, &user_ulid).map(|h| h.as_bytes().to_vec())
+    }).transpose() else {
+        return HttpResponse::InternalServerError().body("Internal server error");
+    };
+
+    let user_req = model::users::UpdateUser {
+        username: body.username.clone(),
+        display_name: body.display_name.clone(),
+        hashed_password,
+    };
+
+    let Ok(_) = model::users::update_user(&mut tx, user_ulid, user_req).await else {
+        return HttpResponse::InternalServerError().body("Internal server error");
+    };
+
+    let Ok(_) = tx.commit().await else {
+        return HttpResponse::InternalServerError().body("Internal server error");
+    };
+
+    HttpResponse::NoContent().finish()
+}
+
+pub fn hash_password(
+    password: &str,
+    user_ulid: &ulid::Ulid,
+) -> Result<String, bcrypt::BcryptError> {
+    bcrypt::hash_with_salt(password, bcrypt::DEFAULT_COST, ulid_to_binary(*user_ulid))
+        .map(|s| s.to_string())
 }
