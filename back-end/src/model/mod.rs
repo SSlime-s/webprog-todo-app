@@ -4,7 +4,6 @@ pub mod tasks;
 pub mod types;
 pub mod users;
 
-
 #[derive(Debug, Clone)]
 pub enum Update<T> {
     Set(T),

@@ -2,8 +2,8 @@ use std::{fmt::Display, str::FromStr};
 
 use sqlx::{mysql::MySqlArguments, Acquire, MySql};
 
-use crate::utils::ulid_to_binary;
 use super::Update;
+use crate::utils::ulid_to_binary;
 
 use super::types;
 
