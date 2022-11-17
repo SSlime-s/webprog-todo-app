@@ -16,6 +16,10 @@ export const postTask = (client: Client) => async (task: PostTaskRequest) => {
     body: JSON.stringify(task),
     credentials: 'include',
   })
-  const data = await res.json()
-  return data
+
+  if (!res.ok) {
+    throw new Error(res.statusText)
+  }
+
+  return res
 }

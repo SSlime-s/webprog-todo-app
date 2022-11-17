@@ -13,5 +13,10 @@ export const postLogin = (client: Client) => async (req: postLoginReq) => {
     body: JSON.stringify(req),
     credentials: 'include',
   })
-  return
+
+  if (!res.ok) {
+    throw new Error(res.statusText)
+  }
+
+  return res
 }

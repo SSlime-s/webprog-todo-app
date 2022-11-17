@@ -1,3 +1,5 @@
+import { taskSchema } from 'apis/parser/task'
+import { z } from 'zod'
 import { Client } from '..'
 
 export interface GetTasksMeRequest {
@@ -16,6 +18,12 @@ export const getTasksMe =
     const res = await fetch(url, {
       credentials: 'include',
     })
+
+    if (!res.ok) {
+      throw new Error(res.statusText)
+    }
+
     const data = await res.json()
-    return data
+    const parsedData = z.array(taskSchema).parse(data)
+    return parsedData
   }

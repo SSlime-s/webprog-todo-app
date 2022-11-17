@@ -33,6 +33,10 @@ export const updateTask =
       body: JSON.stringify(req),
       credentials: 'include',
     })
-    const data = await res.json()
-    return data
+
+    if (!res.ok) {
+      throw new Error(res.statusText)
+    }
+
+    return res
   }
