@@ -1,4 +1,4 @@
-import { Client } from '../../apis'
+import { Client } from 'apis'
 
 const getMe = (client: Client) => async () => {
   const res = await fetch(`${client.baseURL}/me`, {

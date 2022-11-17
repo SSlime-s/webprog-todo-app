@@ -1,12 +1,12 @@
 import { NextPage } from 'next'
 import { Form, Input, Button, Card, message } from 'antd'
 import styled from '@emotion/styled'
-import { useClient } from '../../apis'
+import { useClient } from 'apis'
 import { useCallback, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import NextLink from 'next/link'
 import { UrlObject } from 'url'
-import { postLogin } from '../../apis/login'
+import { postLogin } from 'apis/login'
 
 const Container = styled.div`
   display: grid;

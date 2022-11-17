@@ -1,6 +1,6 @@
 import NextLink from 'next/link'
 import { NextPage } from 'next'
-import { getHello, useClient } from '../apis'
+import { getHello, useClient } from 'apis'
 import useSWR from 'swr'
 import { Card, message, Button } from 'antd'
 import { useCallback } from 'react'

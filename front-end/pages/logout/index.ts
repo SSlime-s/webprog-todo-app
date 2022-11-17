@@ -1,4 +1,4 @@
-import { Client } from '../../apis'
+import { Client } from 'apis'
 
 export const deleteLogout = (client: Client) => async () => {
   const res = await fetch(`${client.baseURL}/logout`, {
