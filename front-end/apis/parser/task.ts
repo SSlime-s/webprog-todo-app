@@ -1,10 +1,11 @@
 import { z } from 'zod'
+import { dateSchema } from '.'
 
 export const tagSchema = z.object({
   id: z.string(),
   name: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  created_at: dateSchema,
+  updated_at: dateSchema,
 })
 export type Tag = z.infer<typeof tagSchema>
 
@@ -30,9 +31,9 @@ export const taskSchema = z.object({
   description: z.string(),
   state: stateSchema,
   priority: prioritySchema.optional(),
-  due_date: z.string().optional(),
+  due_date: dateSchema.optional(),
 
-  created_at: z.string(),
-  updated_at: z.string(),
+  created_at: dateSchema,
+  updated_at: dateSchema,
 })
 export type Task = z.infer<typeof taskSchema>
