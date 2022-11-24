@@ -24,6 +24,11 @@ export const getTasksMe =
     }
 
     const data = await res.json()
-    const parsedData = z.array(taskSchema).parse(data)
+    const parsedData = z
+      .object({
+        items: z.array(taskSchema),
+        total: z.number(),
+      })
+      .parse(data)
     return parsedData
   }
