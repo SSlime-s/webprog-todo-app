@@ -3,6 +3,12 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use sqlx::{error::BoxDynError, mysql::MySqlValueRef, FromRow, MySql, Type};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VecWithTotal<T: std::fmt::Debug + Clone> {
+    pub total: usize,
+    pub items: Vec<T>,
+}
+
 #[derive(Debug, Clone, FromRow)]
 pub struct Tag {
     pub id: Vec<u8>,

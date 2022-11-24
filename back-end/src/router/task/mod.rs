@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     model::{
         self,
-        types::{TaskPriority, TaskState, Todo, TodoReq},
+        types::{TaskPriority, TaskState, Todo, TodoReq, VecWithTotal},
         Update,
     },
     utils::{binary_to_ulid, check_is_logged_in, ulid_to_binary},
@@ -101,13 +101,19 @@ pub async fn get_tasks_me(
             .await
             .map_err(|e| {
                 HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
-            })?
-            .into_iter()
-            .map(TaskResponse::try_from)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| {
-                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
             })?;
+        let tasks = VecWithTotal {
+            total: tasks.total,
+            items: tasks
+                .items
+                .into_iter()
+                .map(TaskResponse::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| {
+                    HttpResponse::InternalServerError()
+                        .body(format!("Internal Server Error: {}", e))
+                })?,
+        };
 
         Ok(HttpResponse::Ok().json(tasks))
     }

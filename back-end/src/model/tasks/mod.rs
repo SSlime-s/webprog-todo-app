@@ -2,7 +2,7 @@ use std::{fmt::Display, str::FromStr};
 
 use sqlx::{mysql::MySqlArguments, Acquire, MySql};
 
-use super::Update;
+use super::{types::VecWithTotal, Update};
 use crate::utils::ulid_to_binary;
 
 use super::types;
@@ -58,11 +58,11 @@ pub async fn get_tasks(
     author_id: ulid::Ulid,
     limit: Option<Limit>,
     sorted_by: Option<SortedBy>,
-) -> anyhow::Result<Vec<types::Todo>> {
+) -> anyhow::Result<VecWithTotal<types::Todo>> {
     let mut conn = conn.acquire().await?;
 
     let query = format!(
-        "SELECT * FROM `todos` WHERE `author_id` = ? {};",
+        "SELECT SQL_CALC_FOUND_ROWS * FROM `todos` WHERE `author_id` = ? {};",
         limit.map(|l| l.to_prepared_query()).unwrap_or_default()
     );
 
@@ -84,7 +84,12 @@ pub async fn get_tasks(
 
     let rows = building_query.fetch_all(&mut *conn).await?;
 
-    Ok(rows)
+    let total = sqlx::query_as::<_, (i64,)>("SELECT FOUND_ROWS()")
+        .fetch_one(&mut *conn)
+        .await?
+        .0 as usize;
+
+    Ok(VecWithTotal { total, items: rows })
 }
 
 pub async fn get_task(
