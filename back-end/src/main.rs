@@ -57,7 +57,6 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
-                    .cookie_secure(false)
                     .build(),
             )
             .wrap(actix_web::middleware::Logger::default())
