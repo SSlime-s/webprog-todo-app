@@ -42,7 +42,7 @@ pub struct UserReq {
     pub hashed_password: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum TaskState {
     Icebox,
@@ -89,7 +89,7 @@ impl Type<MySql> for TaskState {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum TaskPriority {
     Low,
