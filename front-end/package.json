@@ -11,6 +11,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@ant-design/colors": "^6.0.0",
+    "@ant-design/icons": "^4.8.0",
     "@emotion/react": "^11",
     "@emotion/styled": "^11",
     "antd": "^4.24.2",
