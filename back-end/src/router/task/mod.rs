@@ -17,8 +17,8 @@ use crate::{
 
 pub fn tasks_router() -> impl HttpServiceFactory {
     web::scope("/tasks")
-        .service(get_tasks_me)
         .service(post_task)
+        .service(get_tasks_me)
         .service(get_task)
         .service(delete_task)
         .service(patch_task)
@@ -155,7 +155,7 @@ pub struct PostTaskRequest {
     pub due_date: Option<String>,
 }
 
-#[post("/")]
+#[post("")]
 pub async fn post_task(
     _req: HttpRequest,
     body: web::Json<PostTaskRequest>,

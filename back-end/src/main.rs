@@ -12,7 +12,7 @@ use sqlx::mysql::MySqlPoolOptions;
 
 use crate::router::{account::account_router, task::tasks_router};
 
-#[get("/")]
+#[get("")]
 async fn hello_world(session: Session) -> impl Responder {
     let user_id = session.get::<String>("user_id").unwrap();
     log::info!("user_id: {:?}", user_id);
@@ -60,6 +60,7 @@ async fn main() -> std::io::Result<()> {
                     .build(),
             )
             .wrap(actix_web::middleware::Logger::default())
+            .wrap(actix_web::middleware::NormalizePath::trim())
             .app_data(Data::new(pool.clone()))
             .service(hello_world)
             .service(tasks_router())
