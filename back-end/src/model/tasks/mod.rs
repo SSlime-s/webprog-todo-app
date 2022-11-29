@@ -58,13 +58,28 @@ pub async fn get_tasks(
     author_id: ulid::Ulid,
     limit: Option<Limit>,
     sorted_by: Option<SortedBy>,
+
+    state_filter: Option<Vec<types::TaskState>>,
 ) -> anyhow::Result<VecWithTotal<types::Todo>> {
     let mut conn = conn.acquire().await?;
 
-    let query = format!(
-        "SELECT SQL_CALC_FOUND_ROWS * FROM `todos` WHERE `author_id` = ? {};",
-        limit.map(|l| l.to_prepared_query()).unwrap_or_default()
-    );
+    let query = if let Some(state_filter) = state_filter {
+        format!(
+            "SELECT SQL_CALC_FOUND_ROWS * FROM `todos` WHERE `author_id` = ? AND `state` IN ({}) {};",
+            state_filter
+                .iter()
+                .map(|s| s.to_string())
+                .map(|s| format!("'{}'", s))
+                .collect::<Vec<_>>()
+                .join(", "),
+            limit.map(|l| l.to_prepared_query()).unwrap_or_default()
+        )
+    } else {
+        format!(
+            "SELECT SQL_CALC_FOUND_ROWS * FROM `todos` WHERE `author_id` = ? {};",
+            limit.map(|l| l.to_prepared_query()).unwrap_or_default()
+        )
+    };
 
     let bin_id = ulid_to_binary(author_id);
 

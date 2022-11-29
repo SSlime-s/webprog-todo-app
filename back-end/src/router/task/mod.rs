@@ -1,3 +1,5 @@
+use std::{collections::HashSet, str::FromStr};
+
 use actix_session::Session;
 use actix_web::{
     delete, dev::HttpServiceFactory, get, patch, post, web, HttpRequest, HttpResponse, Responder,
@@ -72,6 +74,7 @@ pub struct GetTaskQuery {
 
     state: Option<TaskState>,
     priority: Option<TaskPriority>,
+    state_filter: Option<String>,
 }
 #[get("/me")]
 pub async fn get_tasks_me(
@@ -96,8 +99,28 @@ pub async fn get_tasks_me(
             }
             (None, None) => None,
         };
+        let state_filter = query
+            .state_filter
+            .clone()
+            .map(|s| {
+                s.strip_prefix('[')
+                    .and_then(|s| s.strip_suffix(']'))
+                    .map(|s| {
+                        s.split(',')
+                            .map(|s| s.trim().to_string())
+                            .map(|s| {
+                                TaskState::from_str(&s)
+                                    .map_err(|_e| HttpResponse::BadRequest().body("Invalid query"))
+                            })
+                            .collect::<Result<HashSet<TaskState>, HttpResponse>>()
+                            .map(|s| s.into_iter().collect::<Vec<_>>())
+                    })
+                    .ok_or_else(|| HttpResponse::BadRequest().body("Invalid query"))
+                    .and_then(std::convert::identity)
+            })
+            .transpose()?;
 
-        let tasks = model::tasks::get_tasks(pool.as_ref(), user_ulid, limit, None)
+        let tasks = model::tasks::get_tasks(pool.as_ref(), user_ulid, limit, None, state_filter)
             .await
             .map_err(|e| {
                 HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
@@ -303,6 +326,7 @@ pub async fn patch_task(
         session: Session,
         pool: web::Data<sqlx::MySqlPool>,
     ) -> Result<HttpResponse, HttpResponse> {
+        dbg!(&id);
         let mut tx = pool.begin().await.map_err(|e| {
             HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
         })?;
@@ -313,6 +337,8 @@ pub async fn patch_task(
 
         let task_ulid = ulid::Ulid::from_string(&id)
             .map_err(|e| HttpResponse::BadRequest().body(format!("Invalid task id: {}", e)))?;
+
+        dbg!(task_ulid);
 
         let task = model::tasks::get_task_with_lock(&mut tx, task_ulid)
             .await
