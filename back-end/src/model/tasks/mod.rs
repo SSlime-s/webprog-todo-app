@@ -241,7 +241,9 @@ pub async fn update_task(
 
     let bin_id = ulid_to_binary(id);
 
-    let building_query = update.bind_query(sqlx::query(query.as_str()).bind(bin_id.as_slice()));
+    let building_query = update
+        .bind_query(sqlx::query(query.as_str()))
+        .bind(bin_id.as_slice());
 
     building_query.execute(&mut *conn).await?;
 
