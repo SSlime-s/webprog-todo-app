@@ -73,7 +73,7 @@ async fn main() -> std::io::Result<()> {
 fn use_cors_middleware() -> Cors {
     Cors::default()
         .allowed_origin("http://localhost:3000")
-        .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+        .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "PATCH"])
         .allowed_headers(vec![
             http::header::AUTHORIZATION,
             http::header::ACCEPT,
