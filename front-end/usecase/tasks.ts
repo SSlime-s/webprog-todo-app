@@ -3,11 +3,13 @@ import { postTask } from 'apis/tasks'
 import {
   updateTask as updateTaskApi,
   deleteTask as deleteTaskApi,
+  UpdateTaskRequest,
 } from 'apis/tasks/[id]'
 import { getTasksMe } from 'apis/tasks/me'
 import { useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import dayjs from 'dayjs'
+import { DATE_FORMAT } from 'apis/parser'
 
 export const PAGE_COUNT = 10
 export const useTasks = (
@@ -62,15 +64,17 @@ export const useTasks = (
   const updateTask = useCallback(
     async (
       id: string,
-      query: {
-        title?: string
-        description?: string
-        state?: 'icebox' | 'todo' | 'in-progress' | 'done'
-        priority?: 'low' | 'medium' | 'high' | null
-        dueDate?: string | null
+      query: Omit<UpdateTaskRequest, 'due_date'> & {
+        dueDate?: dayjs.Dayjs | null
       }
     ) => {
-      await updateTaskApi(client)(id, query)
+      await updateTaskApi(client)(id, {
+        ...{
+          ...query,
+          dueDate: undefined,
+        },
+        due_date: query.dueDate?.format(DATE_FORMAT),
+      })
 
       mutate((data) => {
         if (!data) {
@@ -84,8 +88,7 @@ export const useTasks = (
               return item
             }
 
-            const due_date =
-              query.dueDate === null ? undefined : dayjs(query.dueDate)
+            const due_date = query.dueDate
 
             return {
               ...item,

@@ -2,6 +2,7 @@ import {
   Button,
   Card,
   Checkbox,
+  DatePicker,
   Form,
   Input,
   Modal,
@@ -29,6 +30,9 @@ import { green, red, grey } from '@ant-design/colors'
 import styled from '@emotion/styled'
 import { DATE_FORMAT } from 'apis/parser'
 import { useMe } from 'usecase/user'
+import moment from 'moment'
+import dayjs from 'dayjs'
+import { UpdateTaskRequest } from 'apis/tasks/[id]'
 
 const STATES = ['icebox', 'todo', 'in-progress', 'done'] as const
 const isValidState = (state: string): state is typeof STATES[number] =>
@@ -180,7 +184,11 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, mutate }) => {
   const [isOpen, setIsOpen] = useState(false)
   const close = useCallback(() => setIsOpen(false), [])
   const handleUpdate = useCallback(
-    (values: Task) => {
+    (
+      values: Omit<UpdateTaskRequest, 'due_date'> & {
+        dueDate?: dayjs.Dayjs | null
+      }
+    ) => {
       mutate.updateTask(task.id, values)
     },
     [mutate, task.id]
@@ -242,8 +250,22 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, mutate }) => {
   }, [hasPrevState, mutate, task.id, task.state])
 
   const isEmpty = useMemo(() => {
-    return task.description === '' && task.priority === null
-  }, [task.description, task.priority])
+    return (
+      task.description === '' &&
+      task.priority === null &&
+      task.due_date === null
+    )
+  }, [task.description, task.due_date, task.priority])
+
+  const dueDateState = useMemo(() => {
+    if (!task.due_date) return null
+    const now = dayjs(new Date())
+    const dueDate = task.due_date
+    const diff = dueDate.diff(now, 'day')
+    if (diff <= 0) return 'overdue'
+    if (diff <= 3) return 'warning'
+    return null
+  }, [task.due_date])
 
   return (
     <>
@@ -280,6 +302,28 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, mutate }) => {
               />
             </PriorityWrap>
           ) : null}
+          {task.due_date !== null ? (
+            <DueDateWrap>
+              <DatePicker
+                value={moment(task.due_date.toDate())}
+                onChange={(date) => {
+                  if (date) {
+                    void mutate.updateTask(task.id, {
+                      dueDate: dayjs(date.toDate()),
+                    })
+                  }
+                }}
+                status={
+                  dueDateState === 'overdue'
+                    ? 'error'
+                    : dueDateState === 'warning'
+                    ? 'warning'
+                    : undefined
+                }
+                bordered={dueDateState !== null}
+              />
+            </DueDateWrap>
+          ) : null}
         </CardWrap>
       </Card>
       <TaskEditModal
@@ -300,6 +344,9 @@ const PriorityWrap = styled.div`
   margin-right: auto;
   margin-left: -12px;
 `
+const DueDateWrap = styled.div`
+  margin-right: auto;
+`
 const DeleteOutlinedColored = styled(DeleteOutlined)`
   color: ${red[5]} !important;
 `
@@ -308,7 +355,11 @@ interface TaskEditModalProps {
   isOpen: boolean
   close: () => void
   defaultTask: Task
-  handleUpdate: (task: Task) => void
+  handleUpdate: (
+    task: Omit<UpdateTaskRequest, 'due_date'> & {
+      dueDate?: dayjs.Dayjs | null
+    }
+  ) => void
 }
 const TaskEditModal: React.FC<TaskEditModalProps> = ({
   isOpen,
@@ -316,7 +367,11 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   defaultTask,
   handleUpdate,
 }) => {
-  const [form] = Form.useForm<Task>()
+  const [form] = Form.useForm<
+    Omit<UpdateTaskRequest, 'due_date'> & {
+      dueDate?: dayjs.Dayjs | null
+    }
+  >()
 
   const [isDirty, setIsDirty] = useState(false)
   const setDirty = useCallback(() => {
@@ -333,7 +388,14 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
 
   const onOk = useCallback(async () => {
     const values = await form.validateFields()
-    handleUpdate(values)
+    handleUpdate({
+      ...values,
+      dueDate:
+        values.dueDate !== undefined && values.dueDate !== null
+          ? dayjs(values.dueDate.toDate())
+          : null,
+    })
+
     close()
   }, [form, handleUpdate, close])
   const onCancel = useCallback(() => {
@@ -401,6 +463,9 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
             </Select.Option>
           </Select>
         </Form.Item>
+        <Form.Item label="期限" name="dueDate">
+          <DatePicker />
+        </Form.Item>
       </Form>
     </Modal>
   )
@@ -419,7 +484,11 @@ const NewTaskModal: React.FC<NewTaskModalProps> = ({
 
   const onOk = useCallback(async () => {
     const values = await form.validateFields()
-    handleCreate(values)
+    handleCreate({
+      ...values,
+      due_date:
+        values.due_date !== null ? dayjs(values.due_date.toDate()) : null,
+    })
     form.resetFields()
     close()
   }, [form, handleCreate, close])
@@ -461,7 +530,7 @@ const NewTaskModal: React.FC<NewTaskModalProps> = ({
             </Select.Option>
           </Select>
         </Form.Item>
-        <Form.Item label="タイトル" name="title">
+        <Form.Item label="タイトル" name="title" required>
           <Input />
         </Form.Item>
         <Form.Item label="説明" name="description">
@@ -479,6 +548,9 @@ const NewTaskModal: React.FC<NewTaskModalProps> = ({
               <PriorityTip priority="low" />
             </Select.Option>
           </Select>
+        </Form.Item>
+        <Form.Item label="期限" name="due_date">
+          <DatePicker />
         </Form.Item>
       </Form>
     </Modal>
