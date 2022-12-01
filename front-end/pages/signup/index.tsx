@@ -67,7 +67,7 @@ const SignUp: NextPage = () => {
       message.error(e)
       console.log(e)
     }
-  }, [])
+  }, [client, form, redirectTo, router])
 
   return (
     <Container>

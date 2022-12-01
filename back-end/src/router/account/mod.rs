@@ -262,8 +262,6 @@ pub async fn patch_me(
         hashed_password,
     };
 
-    dbg!(user_req.clone());
-
     let Ok(_) = model::users::update_user(&mut tx, user_ulid, user_req).await else {
         return HttpResponse::InternalServerError().body("Internal server error");
     };

@@ -335,7 +335,6 @@ pub async fn patch_task(
         session: Session,
         pool: web::Data<sqlx::MySqlPool>,
     ) -> Result<HttpResponse, HttpResponse> {
-        dbg!(&id);
         let mut tx = pool.begin().await.map_err(|e| {
             HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
         })?;
@@ -346,8 +345,6 @@ pub async fn patch_task(
 
         let task_ulid = ulid::Ulid::from_string(&id)
             .map_err(|e| HttpResponse::BadRequest().body(format!("Invalid task id: {}", e)))?;
-
-        dbg!(task_ulid);
 
         let task = model::tasks::get_task_with_lock(&mut tx, task_ulid)
             .await
@@ -370,9 +367,9 @@ pub async fn patch_task(
                 .clone()
                 .map(|d| {
                     d.map(|s| {
-                        chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d").map_err(|e| {
-                            HttpResponse::BadRequest().body(format!("Invalid due date: {}", e))
-                        })
+                        chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S").map_err(
+                            |e| HttpResponse::BadRequest().body(format!("Invalid due date: {}", e)),
+                        )
                     })
                     .transpose()
                 })
