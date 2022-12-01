@@ -1,7 +1,6 @@
 use actix_session::Session;
 use actix_web::{
-    delete, dev::HttpServiceFactory, get, patch, post, web, HttpRequest, HttpResponse,
-    Responder,
+    delete, dev::HttpServiceFactory, get, patch, post, web, HttpRequest, HttpResponse, Responder,
 };
 use serde::{Deserialize, Serialize};
 
@@ -168,10 +167,15 @@ pub async fn get_me(session: Session, pool: web::Data<sqlx::MySqlPool>) -> impl 
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteMeRequest {
+    pub password: String,
+}
 #[delete("/me")]
 pub async fn delete_me(
     _req: HttpRequest,
     session: Session,
+    body: web::Json<DeleteMeRequest>,
     pool: web::Data<sqlx::MySqlPool>,
 ) -> impl Responder {
     let user_id = session.get::<String>("user_id");
@@ -189,6 +193,17 @@ pub async fn delete_me(
     }
     let user_ulid = user_ulid.unwrap();
 
+    let Ok(hashed_password) = hash_password(&body.0.password, &user_ulid).map(|x| x.as_bytes().to_vec()) else {
+        return HttpResponse::InternalServerError().body("Internal server error");
+    };
+    let Ok(is_verified) =
+        model::users::verify_password(pool.as_ref(), user_ulid, &hashed_password).await else {
+            return HttpResponse::InternalServerError().body("Internal server error");
+        };
+    if !is_verified {
+        return HttpResponse::BadRequest().body("Invalid password");
+    }
+
     if let Err(e) = remove_user(pool.as_ref(), user_ulid).await {
         return HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e));
     }
@@ -205,6 +220,7 @@ pub struct PutUserRequest {
     pub display_name: Update<String>,
     #[serde(default)]
     pub password: Update<String>,
+    pub current_password: String,
 }
 #[patch("/me")]
 pub async fn patch_me(
@@ -221,6 +237,18 @@ pub async fn patch_me(
         return HttpResponse::Unauthorized().finish();
     };
 
+    let Ok(hashed_current_password) =
+        hash_password(&body.current_password, &user_ulid).map(|x| x.as_bytes().to_vec())
+            else {
+                return HttpResponse::InternalServerError().body("Internal server error");
+            };
+    let Ok(is_verify) = model::users::verify_password(&mut tx, user_ulid, &hashed_current_password).await else {
+        return HttpResponse::InternalServerError().body("Internal server error");
+    };
+    if !is_verify {
+        return HttpResponse::BadRequest().body("Invalid password");
+    }
+
     let password = body.password.clone();
     let Ok(hashed_password) = password.map(|password| {
         hash_password(&password, &user_ulid).map(|h| h.as_bytes().to_vec())
@@ -233,6 +261,8 @@ pub async fn patch_me(
         display_name: body.display_name.clone(),
         hashed_password,
     };
+
+    dbg!(user_req.clone());
 
     let Ok(_) = model::users::update_user(&mut tx, user_ulid, user_req).await else {
         return HttpResponse::InternalServerError().body("Internal server error");

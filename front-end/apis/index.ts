@@ -11,7 +11,7 @@ export const useClient = () => {
 }
 
 export const getHello = (client: Client) => async () => {
-  const res = await fetch(`${client.baseURL}/`, {
+  const res = await fetch(`${client.baseURL}`, {
     credentials: 'include',
   })
   const data = await res.text()

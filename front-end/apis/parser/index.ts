@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import dayjs from 'dayjs'
 
-// YYYY-mm-dd HH:MM:SS
+export const DATE_FORMAT = 'YYYY-MM-DD HH:mm:ss'
 export const dateSchema = z
   .string()
-  .refine((s) => dayjs(s, 'YYYY-MM-DD HH:mm:ss').isValid())
-  .transform((s) => dayjs(s, 'YYYY-MM-DD HH:mm:ss'))
+  .refine((s) => dayjs(s, DATE_FORMAT).isValid())
+  .transform((s) => dayjs(s, DATE_FORMAT))

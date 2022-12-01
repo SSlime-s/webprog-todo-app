@@ -101,6 +101,25 @@ impl UpdateUser {
     }
 }
 
+pub async fn verify_password(
+    conn: impl Acquire<'_, Database = MySql>,
+    id: ulid::Ulid,
+    hashed_password: &[u8],
+) -> anyhow::Result<bool> {
+    let mut conn = conn.acquire().await?;
+
+    let query = "SELECT COUNT(*) FROM `users` WHERE `id` = ? AND `hashed_password` = ?;";
+    let bin_id = ulid_to_binary(id);
+
+    let count = sqlx::query(query)
+        .bind(bin_id.as_slice())
+        .bind(hashed_password)
+        .fetch_one(&mut *conn)
+        .await?
+        .get::<i32, _>(0);
+    Ok(count > 0)
+}
+
 pub async fn update_user(
     conn: impl Acquire<'_, Database = MySql>,
     id: ulid::Ulid,

@@ -69,6 +69,8 @@ impl TryFrom<Todo> for TaskResponse {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetTaskQuery {
+    phrase: Option<String>,
+
     limit: Option<usize>,
     offset: Option<usize>,
 
@@ -120,11 +122,18 @@ pub async fn get_tasks_me(
             })
             .transpose()?;
 
-        let tasks = model::tasks::get_tasks(pool.as_ref(), user_ulid, limit, None, state_filter)
-            .await
-            .map_err(|e| {
-                HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
-            })?;
+        let tasks = model::tasks::get_tasks(
+            pool.as_ref(),
+            user_ulid,
+            query.phrase.clone(),
+            limit,
+            None,
+            state_filter,
+        )
+        .await
+        .map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Internal Server Error: {}", e))
+        })?;
         let tasks = VecWithTotal {
             total: tasks.total,
             items: tasks

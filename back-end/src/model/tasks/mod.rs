@@ -7,28 +7,79 @@ use crate::utils::ulid_to_binary;
 
 use super::types;
 
-#[derive(Debug, Clone)]
-pub enum SortedBy {
-    CreatedAt,
-    UpdatedAt,
+#[derive(Debug, Clone, Copy)]
+pub enum Order {
+    Asc,
+    Desc,
 }
-impl FromStr for SortedBy {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self> {
-        match s {
-            "created_at" => Ok(Self::CreatedAt),
-            "updated_at" => Ok(Self::UpdatedAt),
-            _ => Err(anyhow::anyhow!("Invalid sort_by")),
+impl Order {
+    pub fn to_query(self) -> String {
+        match self {
+            Order::Asc => "ASC".to_string(),
+            Order::Desc => "DESC".to_string(),
         }
     }
 }
-impl Display for SortedBy {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::CreatedAt => write!(f, "created_at"),
-            Self::UpdatedAt => write!(f, "updated_at"),
+impl FromStr for Order {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "asc" => Ok(Order::Asc),
+            "desc" => Ok(Order::Desc),
+            _ => Err(anyhow::anyhow!("Invalid order")),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum SortedBy {
+    CreatedAt(Order),
+    UpdatedAt(Order),
+    Priority(Order),
+    PriorityAndCreatedAt(Order, Order),
+    PriorityAndUpdatedAt(Order, Order),
+}
+impl SortedBy {
+    const PRIORITY_CASE_QUERY: &'static str = r#"CASE
+            WHEN (`priority` = 'low') THEN 0
+            WHEN (`priority` IS NULL) THEN 1
+            WHEN (`priority` = 'medium') THEN 2
+            WHEN (`priority` = 'high') THEN 3
+            ELSE 4 END"#;
+
+    pub fn to_query(&self) -> String {
+        let mut query = Vec::new();
+        query.push("ORDER BY".to_string());
+
+        match self {
+            SortedBy::CreatedAt(order) => {
+                query.push(format!("`created_at` {}", order.to_query()));
+            }
+            SortedBy::UpdatedAt(order) => {
+                query.push(format!("`updated_at` {}", order.to_query()));
+            }
+            SortedBy::Priority(order)
+            | SortedBy::PriorityAndCreatedAt(order, _)
+            | SortedBy::PriorityAndUpdatedAt(order, _) => {
+                query.push(format!(
+                    "{} {}",
+                    Self::PRIORITY_CASE_QUERY,
+                    order.to_query()
+                ));
+                match self {
+                    SortedBy::PriorityAndCreatedAt(_, order) => {
+                        query.push(format!(", `created_at` {}", order.to_query()));
+                    }
+                    SortedBy::PriorityAndUpdatedAt(_, order) => {
+                        query.push(format!(", `updated_at` {}", order.to_query()));
+                    }
+                    SortedBy::Priority(_) => {}
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        query.join(" ")
     }
 }
 
@@ -56,6 +107,7 @@ impl Limit {
 pub async fn get_tasks(
     conn: impl Acquire<'_, Database = MySql>,
     author_id: ulid::Ulid,
+    phrase: Option<String>,
     limit: Option<Limit>,
     sorted_by: Option<SortedBy>,
 
@@ -63,29 +115,41 @@ pub async fn get_tasks(
 ) -> anyhow::Result<VecWithTotal<types::Todo>> {
     let mut conn = conn.acquire().await?;
 
-    let query = if let Some(state_filter) = state_filter {
-        format!(
-            "SELECT SQL_CALC_FOUND_ROWS * FROM `todos` WHERE `author_id` = ? AND `state` IN ({}) {};",
-            state_filter
+    let mut query = "SELECT SQL_CALC_FOUND_ROWS * FROM `todos` WHERE `author_id` = ?".to_string();
+    if phrase.is_some() {
+        query.push_str(" AND (`title` LIKE ? OR `description` LIKE ?)");
+    }
+    if let Some(state_filter) = state_filter {
+        query.push_str(" AND `state` IN (");
+        query.push_str(
+            &state_filter
                 .iter()
-                .map(|s| s.to_string())
-                .map(|s| format!("'{}'", s))
+                .map(|s| format!("'{}'", s.to_string()))
                 .collect::<Vec<_>>()
                 .join(", "),
-            limit.map(|l| l.to_prepared_query()).unwrap_or_default()
-        )
-    } else {
-        format!(
-            "SELECT SQL_CALC_FOUND_ROWS * FROM `todos` WHERE `author_id` = ? {};",
-            limit.map(|l| l.to_prepared_query()).unwrap_or_default()
-        )
-    };
+        );
+        query.push(')');
+    }
+    query.push_str(&format!(
+        " {}",
+        SortedBy::CreatedAt(Order::Desc).to_query().as_str()
+    ));
+    query.push_str(&format!(
+        " {}",
+        limit.map(|l| l.to_prepared_query()).unwrap_or_default()
+    ));
+    query.push(';');
 
     let bin_id = ulid_to_binary(author_id);
 
     let building_query = {
         let mut building_query =
             sqlx::query_as::<_, types::Todo>(query.as_str()).bind(bin_id.as_slice());
+
+        if let Some(phrase) = phrase {
+            let phrase = format!("%{}%", phrase);
+            building_query = building_query.bind(phrase.clone()).bind(phrase);
+        }
 
         match limit {
             Some(Limit::LimitOffset(limit, offset)) => {

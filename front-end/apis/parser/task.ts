@@ -30,8 +30,8 @@ export const taskSchema = z.object({
   title: z.string(),
   description: z.string(),
   state: stateSchema,
-  priority: prioritySchema.optional(),
-  due_date: dateSchema.optional(),
+  priority: prioritySchema.nullable(),
+  due_date: dateSchema.nullable(),
 
   created_at: dateSchema,
   updated_at: dateSchema,

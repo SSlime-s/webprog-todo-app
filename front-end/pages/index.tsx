@@ -1,39 +1,36 @@
 import NextLink from 'next/link'
 import { NextPage } from 'next'
-import { getHello, useClient } from 'apis'
-import useSWR from 'swr'
-import { Card, message, Button } from 'antd'
-import { useCallback } from 'react'
-import { deleteLogout } from './logout'
+import { useMe } from 'usecase/user'
+import { useRouter } from 'next/router'
 
 const Home: NextPage = () => {
-  const client = useClient()
-  const { data } = useSWR('hello', getHello(client))
+  const { data: me, isLoading, isUnauthorized } = useMe()
+  const router = useRouter()
 
-  const logout = useCallback(async () => {
-    try {
-      await deleteLogout(client)()
-    } catch (e: any) {
-      // message.error(e)
-      console.error(e)
-    }
-  }, [])
+  if (isUnauthorized) {
+    router.push({
+      pathname: '/login',
+      query: { redirect: router.asPath },
+    })
+    return null
+  }
+
+  if (isLoading) {
+    return <div>loading...</div>
+  }
 
   return (
     <div>
       <h1>Home</h1>
-      <p>{data}</p>
-      <Button onClick={logout}>ログアウト</Button>
-      <Card>
-        <ul>
-          <li>
-            <NextLink href="/signup">Sign Up</NextLink>
-          </li>
-          <li>
-            <NextLink href="/login">Login</NextLink>
-          </li>
-        </ul>
-      </Card>
+      <div>Hello {me?.display_name || me?.username || 'anonymous'}!</div>
+      <ul>
+        <li>
+          <NextLink href="/account">アカウント管理</NextLink>
+        </li>
+        <li>
+          <NextLink href="tasks">タスク管理</NextLink>
+        </li>
+      </ul>
     </div>
   )
 }
